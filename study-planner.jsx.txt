@@ -1,0 +1,731 @@
+import { useState, useEffect } from "react";
+
+// ── Design tokens ──────────────────────────────────────────────────────────
+// Deep navy + warm amber + clean white. Medical precision meets study warmth.
+// Display: "DM Serif Display" (authoritative, not cold)
+// Body: "Inter" (readable at small sizes)
+// Accent: amber #D4941A with deep navy #0D1F3C
+const COLORS = {
+  navy: "#0D1F3C",
+  navyMid: "#1A3460",
+  navyLight: "#2A4A7F",
+  amber: "#D4941A",
+  amberLight: "#F0B429",
+  amberBg: "#FEF7E8",
+  cream: "#FAFAF7",
+  white: "#FFFFFF",
+  grayLight: "#F0F0ED",
+  grayMid: "#C8C8C2",
+  grayText: "#6B6B63",
+  success: "#2E7D52",
+  successBg: "#E8F5EE",
+  danger: "#C0392B",
+  dangerBg: "#FDEDEC",
+};
+
+// ── Blueprint data ──────────────────────────────────────────────────────────
+const BLUEPRINT = [
+  { subject: "Internal Medicine + Geriatrics", weight: 27, color: "#0D1F3C" },
+  { subject: "Obstetrics & Gynecology", weight: 13, color: "#D4941A" },
+  { subject: "Pediatrics", weight: 13, color: "#2A4A7F" },
+  { subject: "Emergency + Orthopedics", weight: 10.5, color: "#1A6B45" },
+  { subject: "Interpretative (ECG/X-ray/Labs)", weight: 10, color: "#7B3F9E" },
+  { subject: "Community Medicine", weight: 7.5, color: "#C0571B" },
+  { subject: "Psychiatry", weight: 7, color: "#1A5A7A" },
+  { subject: "Surgery", weight: 4, color: "#5A5A5A" },
+  { subject: "ENT", weight: 3.5, color: "#8B6914" },
+  { subject: "Ophthalmology", weight: 2.5, color: "#4A7A4A" },
+  { subject: "Dermatology", weight: 1, color: "#9A4A5A" },
+];
+
+// ── Study schedule ──────────────────────────────────────────────────────────
+const STUDY_PHASES = [
+  { period: "15–20 يونيو", topic: "Cardiology", phase: 1 },
+  { period: "22–27 يونيو", topic: "Respiratory", phase: 1 },
+  { period: "29 يونيو – 4 يوليو", topic: "Endocrine", phase: 1 },
+  { period: "6–11 يوليو", topic: "GIT + Liver", phase: 1 },
+  { period: "13–18 يوليو", topic: "Hematology + Rheumatology", phase: 1 },
+  { period: "20–25 يوليو", topic: "Nephrology + Infectious Diseases", phase: 1 },
+  { period: "27 يوليو – 1 أغسطس", topic: "Neurology + Geriatrics", phase: 1 },
+  { period: "3–8 أغسطس", topic: "Obstetrics", phase: 1 },
+  { period: "10–15 أغسطس", topic: "Gynecology + Pediatrics", phase: 1 },
+  { period: "17–22 أغسطس", topic: "Emergency + Orthopedics", phase: 1 },
+  { period: "24–31 أغسطس", topic: "Interpretative + Community + Psychiatry", phase: 1 },
+  { period: "1–7 سبتمبر", topic: "مراجعة Internal Medicine", phase: 2 },
+  { period: "8–14 سبتمبر", topic: "مراجعة Ob/Gyn", phase: 2 },
+  { period: "15–21 سبتمبر", topic: "مراجعة Pediatrics + Community", phase: 2 },
+  { period: "22–28 سبتمبر", topic: "مراجعة Emergency + Psychiatry", phase: 2 },
+  { period: "29 سبتمبر – 5 أكتوبر", topic: "مراجعة Interpretative", phase: 2 },
+  { period: "6–10 أكتوبر", topic: "Surgery + ENT + Ophthalmology + Dermatology", phase: 2 },
+  { period: "11 أكتوبر", topic: "🎯 Mock Exam كامل", phase: 2 },
+  { period: "12 أكتوبر", topic: "📝 مراجعة الأخطاء", phase: 2 },
+  { period: "13 أكتوبر", topic: "🎯 Mock Exam ثانٍ", phase: 2 },
+  { period: "14 أكتوبر", topic: "⭐ مراجعة High Yield Notes", phase: 2 },
+  { period: "15 أكتوبر", topic: "🏁 مراجعة خفيفة ← الامتحان", phase: 2 },
+];
+
+const CHECKLIST = [
+  "مراجعة الباطنة مرتين",
+  "مراجعة النساء مرتين",
+  "مراجعة ECG وCXR",
+  "مراجعة التطعيمات",
+  "إنهاء Error Log",
+  "أداء Mock Examين على الأقل",
+];
+
+const NAV = [
+  { id: "home", label: "الرئيسية", icon: "🏠" },
+  { id: "blueprint", label: "Blueprint", icon: "📊" },
+  { id: "schedule", label: "خطة الدراسة", icon: "📅" },
+  { id: "daily", label: "Daily Tracker", icon: "✅" },
+  { id: "errors", label: "Error Log", icon: "❌" },
+  { id: "checklist", label: "Checklist", icon: "☑️" },
+];
+
+// Countdown helper
+function getDaysLeft() {
+  const exam = new Date("2026-10-15");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  exam.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((exam - today) / 86400000));
+}
+
+// ── Components ──────────────────────────────────────────────────────────────
+
+function Tag({ children, color = COLORS.navy }) {
+  return (
+    <span style={{
+      background: color + "18",
+      color: color,
+      border: `1px solid ${color}30`,
+      borderRadius: 4,
+      fontSize: 11,
+      fontWeight: 700,
+      padding: "2px 8px",
+      letterSpacing: 0.5,
+      fontFamily: "Inter, sans-serif",
+    }}>{children}</span>
+  );
+}
+
+// ── Home Page ───────────────────────────────────────────────────────────────
+function HomePage() {
+  const days = getDaysLeft();
+  const totalDays = Math.round((new Date("2026-10-15") - new Date("2026-06-15")) / 86400000);
+  const elapsed = totalDays - days;
+  const progress = Math.min(100, Math.round((elapsed / totalDays) * 100));
+
+  return (
+    <div>
+      {/* Hero */}
+      <div style={{
+        background: `linear-gradient(135deg, ${COLORS.navy} 0%, ${COLORS.navyLight} 100%)`,
+        borderRadius: 16,
+        padding: "36px 32px",
+        marginBottom: 24,
+        position: "relative",
+        overflow: "hidden",
+      }}>
+        {/* decorative arc */}
+        <div style={{
+          position: "absolute", right: -40, top: -40,
+          width: 200, height: 200,
+          borderRadius: "50%",
+          border: `40px solid ${COLORS.amber}22`,
+        }} />
+        <div style={{
+          position: "absolute", right: 20, bottom: -60,
+          width: 140, height: 140,
+          borderRadius: "50%",
+          border: `30px solid ${COLORS.amberLight}15`,
+        }} />
+
+        <p style={{ color: COLORS.amberLight, fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, margin: "0 0 6px", letterSpacing: 1.5, textTransform: "uppercase" }}>
+          الزمالة المصرية لطب الأسرة
+        </p>
+        <h1 style={{
+          fontFamily: "'DM Serif Display', Georgia, serif",
+          color: COLORS.white,
+          fontSize: "clamp(28px, 5vw, 44px)",
+          margin: "0 0 4px",
+          lineHeight: 1.15,
+        }}>
+          Study Planner
+        </h1>
+        <p style={{ color: COLORS.grayMid, fontSize: 15, margin: "0 0 28px", fontFamily: "Inter,sans-serif" }}>
+          د. أنور زاهر
+        </p>
+
+        {/* Stats row */}
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          {[
+            { label: "يوم متبقٍ", value: days, highlight: true },
+            { label: "ساعات يومياً", value: "3–4" },
+            { label: "أيام الأسبوع", value: 6 },
+            { label: "الامتحان", value: "15 أكتوبر" },
+          ].map((s, i) => (
+            <div key={i} style={{
+              background: s.highlight ? COLORS.amber : "rgba(255,255,255,0.08)",
+              borderRadius: 10,
+              padding: "14px 20px",
+              minWidth: 90,
+            }}>
+              <div style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontSize: s.highlight ? 32 : 26,
+                color: s.highlight ? COLORS.navy : COLORS.white,
+                lineHeight: 1,
+              }}>{s.value}</div>
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: 0.8,
+                color: s.highlight ? COLORS.navyMid : COLORS.grayMid,
+                marginTop: 4, fontFamily: "Inter, sans-serif",
+              }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ background: COLORS.white, borderRadius: 12, padding: "20px 24px", marginBottom: 16, border: `1px solid ${COLORS.grayLight}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, color: COLORS.navy }}>تقدم الخطة الزمنية</span>
+          <span style={{ fontFamily: "Inter,sans-serif", fontSize: 13, color: COLORS.amber, fontWeight: 700 }}>{progress}%</span>
+        </div>
+        <div style={{ background: COLORS.grayLight, borderRadius: 99, height: 10, overflow: "hidden" }}>
+          <div style={{
+            width: `${progress}%`, height: "100%",
+            background: `linear-gradient(90deg, ${COLORS.amber}, ${COLORS.amberLight})`,
+            borderRadius: 99,
+            transition: "width 1s ease",
+          }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: COLORS.grayText, fontFamily: "Inter,sans-serif" }}>15 يونيو 2026</span>
+          <span style={{ fontSize: 11, color: COLORS.grayText, fontFamily: "Inter,sans-serif" }}>15 أكتوبر 2026</span>
+        </div>
+      </div>
+
+      {/* Phase cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        {[
+          { label: "المرحلة الأولى", sub: "الدراسة الأولى", period: "15 يونيو – 31 أغسطس", icon: "📖", tasks: ["إنهاء المنهج", "مشاهدة الفيديوهات", "حل MCQs", "تسجيل High Yield Notes", "Error Log"] },
+          { label: "المرحلة الثانية", sub: "المراجعة الشاملة", period: "1 سبتمبر – 15 أكتوبر", icon: "🔁", tasks: ["مراجعة المنهج كاملًا", "إعادة حل الأسئلة", "التركيز على الأخطاء", "Mock Exams", "ملخصات نهائية"] },
+        ].map((p, i) => (
+          <div key={i} style={{
+            background: i === 0 ? COLORS.amberBg : COLORS.successBg,
+            border: `1.5px solid ${i === 0 ? COLORS.amber + "40" : COLORS.success + "40"}`,
+            borderRadius: 12, padding: "20px",
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 6 }}>{p.icon}</div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: COLORS.navy, marginBottom: 2 }}>{p.label}</div>
+            <div style={{ fontSize: 12, color: COLORS.grayText, fontFamily: "Inter,sans-serif", marginBottom: 10 }}>{p.period}</div>
+            {p.tasks.map((t, j) => (
+              <div key={j} style={{ fontSize: 12, color: COLORS.navyMid, fontFamily: "Inter,sans-serif", marginBottom: 3 }}>
+                <span style={{ color: COLORS.amber, marginLeft: 4 }}>•</span> {t}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Daily routine */}
+      <div style={{ background: COLORS.white, borderRadius: 12, padding: "20px 24px", border: `1px solid ${COLORS.grayLight}` }}>
+        <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, margin: "0 0 16px", fontSize: 20 }}>نظام اليوم الواحد</h3>
+        <div style={{ display: "grid", gap: 10 }}>
+          {[
+            { act: "فيديو شرح", time: "90 دقيقة", color: COLORS.navyLight },
+            { act: "قراءة المذكرة", time: "60 دقيقة", color: COLORS.amber },
+            { act: "حل MCQs", time: "60–90 دقيقة", color: COLORS.success },
+            { act: "مراجعة Error Log / High Yield", time: "15–20 دقيقة", color: "#7B3F9E" },
+          ].map((a, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: a.color, flexShrink: 0 }} />
+              <div style={{ flex: 1, fontFamily: "Inter,sans-serif", fontSize: 14, color: COLORS.navyMid }}>{a.act}</div>
+              <Tag color={a.color}>{a.time}</Tag>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Blueprint Page ──────────────────────────────────────────────────────────
+function BlueprintPage() {
+  const total = BLUEPRINT.reduce((s, b) => s + b.weight, 0);
+  return (
+    <div>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, fontSize: 28, marginBottom: 6 }}>
+        Blueprint الامتحان
+      </h2>
+      <p style={{ color: COLORS.grayText, fontFamily: "Inter,sans-serif", fontSize: 14, marginBottom: 24 }}>
+        توزيع الأسئلة حسب المادة — ركّز وقتك أين يعود عليك بأكبر عائد.
+      </p>
+
+      {/* Bar chart */}
+      <div style={{ background: COLORS.white, borderRadius: 12, padding: "24px", border: `1px solid ${COLORS.grayLight}`, marginBottom: 20 }}>
+        {BLUEPRINT.map((b, i) => (
+          <div key={i} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontFamily: "Inter,sans-serif", fontSize: 13, color: COLORS.navy, fontWeight: 600 }}>{b.subject}</span>
+              <span style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 700, color: b.color }}>{b.weight}%</span>
+            </div>
+            <div style={{ background: COLORS.grayLight, borderRadius: 99, height: 8, overflow: "hidden" }}>
+              <div style={{
+                width: `${(b.weight / 27) * 100}%`,
+                height: "100%",
+                background: b.color,
+                borderRadius: 99,
+                transition: "width 0.6s ease",
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Key insight */}
+      <div style={{
+        background: COLORS.amberBg,
+        border: `1.5px solid ${COLORS.amber}50`,
+        borderRadius: 12,
+        padding: "16px 20px",
+        display: "flex", gap: 14, alignItems: "flex-start",
+      }}>
+        <span style={{ fontSize: 24 }}>💡</span>
+        <div>
+          <div style={{ fontFamily: "Inter,sans-serif", fontWeight: 700, color: COLORS.navy, marginBottom: 4, fontSize: 14 }}>
+            توصية بناءً على تخصصك (طب أطفال)
+          </div>
+          <div style={{ fontFamily: "Inter,sans-serif", fontSize: 13, color: COLORS.navyMid, lineHeight: 1.7 }}>
+            بما أنك طبيب أطفال، الـ Pediatrics (13%) ستأتي بسهولة أكبر. وجّه طاقتك الإضافية نحو <strong>Baطنة (27%) + Interpretative (10%) + Ob/Gyn (13%) + Emergency (10.5%)</strong> — هذه المواد الأربع تمثّل ~60% من الدرجة.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Schedule Page ───────────────────────────────────────────────────────────
+function SchedulePage() {
+  const [showPhase, setShowPhase] = useState("all");
+  const filtered = STUDY_PHASES.filter(s => showPhase === "all" || s.phase === parseInt(showPhase));
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, fontSize: 28, marginBottom: 6 }}>
+        خطة الدراسة
+      </h2>
+
+      {/* Phase toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+        {[["all", "الكل"], ["1", "المرحلة الأولى"], ["2", "المراجعة"]].map(([v, l]) => (
+          <button key={v} onClick={() => setShowPhase(v)} style={{
+            fontFamily: "Inter,sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            border: "none",
+            borderRadius: 8,
+            padding: "8px 16px",
+            cursor: "pointer",
+            background: showPhase === v ? COLORS.navy : COLORS.grayLight,
+            color: showPhase === v ? COLORS.white : COLORS.grayText,
+            transition: "all 0.2s",
+          }}>{l}</button>
+        ))}
+      </div>
+
+      {/* Timeline */}
+      <div style={{ position: "relative" }}>
+        <div style={{ position: "absolute", right: 16, top: 0, bottom: 0, width: 2, background: COLORS.grayLight }} />
+        {filtered.map((s, i) => (
+          <div key={i} style={{ display: "flex", gap: 16, marginBottom: 16, alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{
+                background: COLORS.white,
+                border: `1.5px solid ${s.phase === 1 ? COLORS.amber + "50" : COLORS.navyLight + "50"}`,
+                borderRadius: 10,
+                padding: "14px 18px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                  <span style={{ fontFamily: "Inter,sans-serif", fontSize: 14, fontWeight: 700, color: COLORS.navy }}>{s.topic}</span>
+                  <Tag color={s.phase === 1 ? COLORS.amber : COLORS.navyLight}>{s.phase === 1 ? "دراسة" : "مراجعة"}</Tag>
+                </div>
+                <div style={{ fontFamily: "Inter,sans-serif", fontSize: 12, color: COLORS.grayText, marginTop: 4 }}>{s.period}</div>
+              </div>
+            </div>
+            <div style={{
+              width: 32, height: 32, flexShrink: 0,
+              borderRadius: "50%",
+              background: s.phase === 1 ? COLORS.amber : COLORS.navyLight,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, color: COLORS.white, fontWeight: 700, fontFamily: "Inter,sans-serif",
+              zIndex: 1,
+            }}>{i + 1}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Daily Tracker ───────────────────────────────────────────────────────────
+function DailyTrackerPage() {
+  const today = new Date().toISOString().split("T")[0];
+  const [entries, setEntries] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dt_entries") || "[]"); } catch { return []; }
+  });
+  const [form, setForm] = useState({
+    date: today, video: false, notes: false, mcqs: "", hours: "", remarks: "",
+  });
+  const [saved, setSaved] = useState(false);
+
+  const save = () => {
+    const updated = [form, ...entries.filter(e => e.date !== form.date)].sort((a, b) => b.date.localeCompare(a.date));
+    setEntries(updated);
+    try { localStorage.setItem("dt_entries", JSON.stringify(updated)); } catch {}
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, fontSize: 28, marginBottom: 20 }}>
+        Daily Tracker
+      </h2>
+
+      {/* Form */}
+      <div style={{ background: COLORS.white, borderRadius: 12, padding: "24px", border: `1px solid ${COLORS.grayLight}`, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <label style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, color: COLORS.navy }}>
+            التاريخ
+            <input type="date" value={form.date}
+              onChange={e => setForm({ ...form, date: e.target.value })}
+              style={inputStyle} />
+          </label>
+          <label style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, color: COLORS.navy }}>
+            عدد MCQs
+            <input type="number" value={form.mcqs} placeholder="مثال: 40"
+              onChange={e => setForm({ ...form, mcqs: e.target.value })}
+              style={inputStyle} />
+          </label>
+          <label style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, color: COLORS.navy }}>
+            ساعات الدراسة
+            <input type="number" step="0.5" value={form.hours} placeholder="مثال: 3.5"
+              onChange={e => setForm({ ...form, hours: e.target.value })}
+              style={inputStyle} />
+          </label>
+        </div>
+
+        {/* Checkboxes */}
+        <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
+          {[["video", "فيديو ✅"], ["notes", "مذكرة ✅"]].map(([k, l]) => (
+            <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: "Inter,sans-serif", fontSize: 14, color: COLORS.navy }}>
+              <input type="checkbox" checked={form[k]}
+                onChange={e => setForm({ ...form, [k]: e.target.checked })}
+                style={{ width: 18, height: 18, accentColor: COLORS.amber }} />
+              {l}
+            </label>
+          ))}
+        </div>
+
+        <label style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, color: COLORS.navy, display: "block", marginBottom: 16 }}>
+          ملاحظات
+          <textarea value={form.remarks} placeholder="ما الذي تعلمته اليوم؟ أي صعوبات؟"
+            onChange={e => setForm({ ...form, remarks: e.target.value })}
+            style={{ ...inputStyle, height: 70, resize: "vertical" }} />
+        </label>
+
+        <button onClick={save} style={{
+          background: saved ? COLORS.success : COLORS.amber,
+          color: COLORS.white,
+          border: "none",
+          borderRadius: 8,
+          padding: "10px 24px",
+          fontFamily: "Inter,sans-serif",
+          fontWeight: 700,
+          fontSize: 14,
+          cursor: "pointer",
+          transition: "background 0.3s",
+        }}>
+          {saved ? "✓ تم الحفظ" : "حفظ اليوم"}
+        </button>
+      </div>
+
+      {/* Log */}
+      {entries.length > 0 && (
+        <div>
+          <h3 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, fontSize: 20, marginBottom: 12 }}>
+            السجل السابق
+          </h3>
+          <div style={{ display: "grid", gap: 10 }}>
+            {entries.slice(0, 10).map((e, i) => (
+              <div key={i} style={{
+                background: COLORS.white,
+                border: `1px solid ${COLORS.grayLight}`,
+                borderRadius: 10,
+                padding: "12px 16px",
+                display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
+              }}>
+                <span style={{ fontFamily: "Inter,sans-serif", fontWeight: 700, fontSize: 13, color: COLORS.navy }}>{e.date}</span>
+                <Tag color={COLORS.navyLight}>{e.hours || "—"} ساعة</Tag>
+                <Tag color={COLORS.amber}>{e.mcqs || "—"} MCQ</Tag>
+                {e.video && <Tag color={COLORS.success}>فيديو ✓</Tag>}
+                {e.notes && <Tag color={COLORS.success}>مذكرة ✓</Tag>}
+                {e.remarks && <span style={{ fontSize: 12, color: COLORS.grayText, fontFamily: "Inter,sans-serif" }}>{e.remarks}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Error Log ───────────────────────────────────────────────────────────────
+function ErrorLogPage() {
+  const [errors, setErrors] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("error_log") || "[]"); } catch { return []; }
+  });
+  const [form, setForm] = useState({ q: "", reason: "", fix: "", reviewed: false });
+  const [saved, setSaved] = useState(false);
+
+  const add = () => {
+    if (!form.q) return;
+    const updated = [{ ...form, id: Date.now(), date: new Date().toLocaleDateString("ar-EG") }, ...errors];
+    setErrors(updated);
+    try { localStorage.setItem("error_log", JSON.stringify(updated)); } catch {}
+    setForm({ q: "", reason: "", fix: "", reviewed: false });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  const toggleReview = (id) => {
+    const updated = errors.map(e => e.id === id ? { ...e, reviewed: !e.reviewed } : e);
+    setErrors(updated);
+    try { localStorage.setItem("error_log", JSON.stringify(updated)); } catch {}
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, fontSize: 28, marginBottom: 6 }}>
+        Error Log
+      </h2>
+      <p style={{ color: COLORS.grayText, fontFamily: "Inter,sans-serif", fontSize: 14, marginBottom: 20 }}>
+        سجّل كل سؤال أخطأت فيه مع سبب الخطأ والتصحيح.
+      </p>
+
+      {/* Add form */}
+      <div style={{ background: COLORS.dangerBg, border: `1.5px solid ${COLORS.danger}30`, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+        <div style={{ display: "grid", gap: 12 }}>
+          {[
+            ["q", "السؤال أو الموضوع *", "اكتب السؤال أو الموضوع"],
+            ["reason", "سبب الخطأ", "لماذا أخطأت؟"],
+            ["fix", "التصحيح / الجواب الصحيح", "ما هو الجواب الصحيح؟"],
+          ].map(([k, label, ph]) => (
+            <label key={k} style={{ fontFamily: "Inter,sans-serif", fontSize: 13, fontWeight: 600, color: COLORS.navy }}>
+              {label}
+              <input value={form[k]} placeholder={ph}
+                onChange={e => setForm({ ...form, [k]: e.target.value })}
+                style={inputStyle} />
+            </label>
+          ))}
+        </div>
+        <button onClick={add} style={{
+          marginTop: 12, background: COLORS.danger, color: COLORS.white,
+          border: "none", borderRadius: 8, padding: "10px 24px",
+          fontFamily: "Inter,sans-serif", fontWeight: 700, fontSize: 14, cursor: "pointer",
+        }}>
+          {saved ? "✓ تمت الإضافة" : "+ إضافة للسجل"}
+        </button>
+      </div>
+
+      {/* List */}
+      {errors.length === 0
+        ? <div style={{ textAlign: "center", color: COLORS.grayText, fontFamily: "Inter,sans-serif", padding: 40 }}>لا توجد أخطاء مسجّلة بعد 🎉</div>
+        : (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: "Inter,sans-serif", fontSize: 13, color: COLORS.grayText }}>{errors.length} خطأ مسجّل</span>
+              <span style={{ fontFamily: "Inter,sans-serif", fontSize: 13, color: COLORS.success }}>{errors.filter(e => e.reviewed).length} تمت مراجعتها</span>
+            </div>
+            {errors.map((e) => (
+              <div key={e.id} style={{
+                background: e.reviewed ? COLORS.successBg : COLORS.white,
+                border: `1.5px solid ${e.reviewed ? COLORS.success + "40" : COLORS.grayLight}`,
+                borderRadius: 10, padding: "14px 18px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "Inter,sans-serif", fontWeight: 700, color: COLORS.navy, fontSize: 14, marginBottom: 6 }}>{e.q}</div>
+                    {e.reason && <div style={{ fontSize: 12, color: COLORS.grayText, marginBottom: 3 }}><strong>السبب:</strong> {e.reason}</div>}
+                    {e.fix && <div style={{ fontSize: 12, color: COLORS.success }}><strong>الصواب:</strong> {e.fix}</div>}
+                    <div style={{ fontSize: 11, color: COLORS.grayMid, marginTop: 6 }}>{e.date}</div>
+                  </div>
+                  <button onClick={() => toggleReview(e.id)} style={{
+                    background: e.reviewed ? COLORS.success : COLORS.grayLight,
+                    color: e.reviewed ? COLORS.white : COLORS.grayText,
+                    border: "none", borderRadius: 6, padding: "6px 12px",
+                    fontFamily: "Inter,sans-serif", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    flexShrink: 0,
+                  }}>
+                    {e.reviewed ? "✓ راجعتها" : "مراجعة"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
+// ── Checklist Page ──────────────────────────────────────────────────────────
+function ChecklistPage() {
+  const [checked, setChecked] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("checklist") || "{}"); } catch { return {}; }
+  });
+
+  const toggle = (i) => {
+    const updated = { ...checked, [i]: !checked[i] };
+    setChecked(updated);
+    try { localStorage.setItem("checklist", JSON.stringify(updated)); } catch {}
+  };
+
+  const done = Object.values(checked).filter(Boolean).length;
+  const pct = Math.round((done / CHECKLIST.length) * 100);
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: COLORS.navy, fontSize: 28, marginBottom: 6 }}>
+        Exam Readiness
+      </h2>
+      <p style={{ color: COLORS.grayText, fontFamily: "Inter,sans-serif", fontSize: 14, marginBottom: 20 }}>
+        Checklist النهائي قبل الامتحان
+      </p>
+
+      {/* Progress ring substitute */}
+      <div style={{
+        background: COLORS.navy,
+        borderRadius: 16,
+        padding: "24px",
+        marginBottom: 24,
+        display: "flex", alignItems: "center", gap: 24,
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            fontFamily: "'DM Serif Display', Georgia, serif",
+            fontSize: 52, color: COLORS.amber, lineHeight: 1,
+          }}>{pct}%</div>
+          <div style={{ fontFamily: "Inter,sans-serif", fontSize: 12, color: COLORS.grayMid, marginTop: 4 }}>جاهز للامتحان</div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: 99, height: 12, overflow: "hidden", marginBottom: 8 }}>
+            <div style={{
+              width: `${pct}%`, height: "100%",
+              background: `linear-gradient(90deg, ${COLORS.amber}, ${COLORS.amberLight})`,
+              borderRadius: 99, transition: "width 0.5s",
+            }} />
+          </div>
+          <div style={{ fontFamily: "Inter,sans-serif", color: COLORS.grayMid, fontSize: 13 }}>
+            {done} من {CHECKLIST.length} مهام مكتملة
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {CHECKLIST.map((item, i) => (
+          <div key={i} onClick={() => toggle(i)} style={{
+            background: checked[i] ? COLORS.successBg : COLORS.white,
+            border: `1.5px solid ${checked[i] ? COLORS.success + "60" : COLORS.grayLight}`,
+            borderRadius: 10, padding: "16px 20px",
+            display: "flex", alignItems: "center", gap: 14,
+            cursor: "pointer",
+            transition: "all 0.2s",
+          }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 6,
+              background: checked[i] ? COLORS.success : COLORS.grayLight,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, flexShrink: 0,
+            }}>
+              {checked[i] ? "✓" : ""}
+            </div>
+            <span style={{
+              fontFamily: "Inter,sans-serif",
+              fontSize: 15,
+              color: checked[i] ? COLORS.success : COLORS.navy,
+              fontWeight: checked[i] ? 700 : 400,
+              textDecoration: checked[i] ? "line-through" : "none",
+            }}>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Input style shared ──────────────────────────────────────────────────────
+const inputStyle = {
+  display: "block",
+  width: "100%",
+  marginTop: 6,
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: `1.5px solid ${COLORS.grayLight}`,
+  fontFamily: "Inter, sans-serif",
+  fontSize: 14,
+  color: COLORS.navy,
+  background: COLORS.white,
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+// ── App Shell ───────────────────────────────────────────────────────────────
+export default function App() {
+  const [page, setPage] = useState("home");
+
+  const PAGES = { home: HomePage, blueprint: BlueprintPage, schedule: SchedulePage, daily: DailyTrackerPage, errors: ErrorLogPage, checklist: ChecklistPage };
+  const PageComp = PAGES[page] || HomePage;
+
+  return (
+    <div style={{ fontFamily: "Inter, sans-serif", background: COLORS.cream, minHeight: "100vh", direction: "rtl" }}>
+      {/* Import fonts */}
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;600;700&display=swap'); * { box-sizing: border-box; } input, textarea { font-family: inherit; direction: rtl; }`}</style>
+
+      {/* Top nav */}
+      <nav style={{
+        position: "sticky", top: 0, zIndex: 100,
+        background: COLORS.white,
+        borderBottom: `1px solid ${COLORS.grayLight}`,
+        padding: "0 16px",
+      }}>
+        <div style={{ maxWidth: 680, margin: "0 auto", display: "flex", overflowX: "auto", gap: 2 }}>
+          {NAV.map(n => (
+            <button key={n.id} onClick={() => setPage(n.id)} style={{
+              background: "none",
+              border: "none",
+              padding: "14px 12px",
+              fontFamily: "Inter, sans-serif",
+              fontSize: 12,
+              fontWeight: page === n.id ? 700 : 400,
+              color: page === n.id ? COLORS.amber : COLORS.grayText,
+              borderBottom: `2px solid ${page === n.id ? COLORS.amber : "transparent"}`,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "color 0.2s",
+            }}>
+              {n.icon} {n.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Content */}
+      <main style={{ maxWidth: 680, margin: "0 auto", padding: "24px 16px 80px" }}>
+        <PageComp />
+      </main>
+    </div>
+  );
+}
